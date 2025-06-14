@@ -16,12 +16,12 @@ defmodule Clipixir.MixProject do
         licenses: ["MIT"],
         maintainers: ["Pranav J"],
         links: %{
-          "GitHub" => "https://github.com/Pranavj17/form_builder_dsl",
-          "Docs" => "https://hexdocs.pm/form_builder_dsl"
+          "GitHub" => "https://github.com/Pranavj17/clipixir",
+          "Docs" => "https://hexdocs.pm/clipixir"
         }
       ],
-      source_url: "https://github.com/Pranavj17/form_builder_dsl",
-      homepage_url: "https://github.com/Pranavj17/form_builder_dsl"
+      source_url: "https://github.com/Pranavj17/clipixir",
+      homepage_url: "https://github.com/Pranavj17/clipixir"
     ]
   end
 
