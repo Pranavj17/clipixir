@@ -21,6 +21,8 @@ mix deps.get
 mix escript.build
 ```
 
+## **Usage**
+
 ```Starting Clipixir
 Tracking clipboard...
 # (Remains quiet and logs nothing else. Ctrl+C to stop.)
