@@ -11,7 +11,7 @@ defmodule Clipixir.MixProject do
       escript: [main_module: CLI],
 
       # Hex package metadata
-      description: "friendly and powerful command-line clipboard manager",
+      description: "A friendly and powerful command-line clipboard manager",
       package: [
         licenses: ["MIT"],
         maintainers: ["Pranav J"],
