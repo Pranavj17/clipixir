@@ -19,3 +19,24 @@ git clone https://github.com/Pranavj17/clipixir.git
 cd clipixir
 mix deps.get
 mix escript.build
+
+```Starting Clipixir
+Tracking clipboard...
+# (Remains quiet and logs nothing else. Ctrl+C to stop.)
+
+
+```Picker
+$ ./clipixir select
+─ Clipboard History Picker ─ (showing 3 of 3)
+[0] Terminal           [Count: 3 Last: 2024-05-14 17:10]
+──────────────────────────────────────────────
+[1] StackOverflow      [Count: 2 Last: 2024-05-14 09:30]
+──────────────────────────────────────────────
+[2] Hello World!       [Count: 1 Last: 2024-05-13 19:02]
+──────────────────────────────────────────────
+Type number, /search, or q to quit: /Stack
+─ Clipboard History Picker ─ (showing 1 of 1)
+[0] StackOverflow      [Count: 2 Last: 2024-05-14 09:30]
+──────────────────────────────────────────────
+Type number, /search, or q to quit: 0
+Copied entry #0 to clipboard, now promoted to top!
