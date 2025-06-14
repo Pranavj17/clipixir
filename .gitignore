@@ -24,3 +24,6 @@ clipixir-*.tar
 
 # Temporary files, for example, from tests.
 /tmp/
+
+#
+clipboard_history.txt

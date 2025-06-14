@@ -43,7 +43,7 @@ defmodule Clipixir do
   ## Example
 
       iex> Clipixir.list_history()
-      [%{value: "foo\nbar", count: 4, last_used: 1715753340, encoded: ...}, ...]
+      [%{value: "foobar", count: 4, last_used: 1715753340, encoded: ...}, ...]
 
   """
   def list_history() do
