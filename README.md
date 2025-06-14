@@ -19,11 +19,12 @@ git clone https://github.com/Pranavj17/clipixir.git
 cd clipixir
 mix deps.get
 mix escript.build
+```
 
 ```Starting Clipixir
 Tracking clipboard...
 # (Remains quiet and logs nothing else. Ctrl+C to stop.)
-
+```
 
 ```Picker
 $ ./clipixir select
@@ -40,3 +41,4 @@ Type number, /search, or q to quit: /Stack
 ──────────────────────────────────────────────
 Type number, /search, or q to quit: 0
 Copied entry #0 to clipboard, now promoted to top!
+```
