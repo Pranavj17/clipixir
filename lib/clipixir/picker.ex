@@ -1,22 +1,19 @@
 defmodule Clipixir.Picker do
   @moduledoc """
-  Interactive CLI picker for clipboard entries.
+  Interactive fuzzy/finder picker for clipboard entries managed by Clipixir.
 
-  ## Usage
-
-      Clipixir.Picker.pick_and_copy()
-
-  Runs an interactive loop to search, preview, and recopy clipboard entries.
-
-  - `/searchterm` — fuzzy search to filter.
-  - Index number — copy and promote to top (just press Enter after number).
-  - `q` — quit.
+  - Use `/searchterm` for live fuzzy/substr search.
+  - Type a number to instantly copy and promote an entry.
+  - Press `q` to quit.
   """
 
   @max_display 15
 
   @doc """
-  Starts the picker loop in the current terminal.
+  Start the picker loop in the current terminal. Shows clipboard history or prompts
+  if empty.
+
+  ## Examples
 
       iex> Clipixir.Picker.pick_and_copy()
       # Interactive TUI shown
@@ -27,6 +24,7 @@ defmodule Clipixir.Picker do
 
     if entries == [] do
       IO.puts(IO.ANSI.red() <> "❗ No clipboard history found!" <> IO.ANSI.reset())
+      IO.gets("Press Enter to close")
     else
       loop(entries)
     end
@@ -39,15 +37,17 @@ defmodule Clipixir.Picker do
 
     IO.puts(
       IO.ANSI.yellow() <>
-        "─ Clipboard History Picker ─ (showing #{display_count} of #{length(items)}) \n" <>
+        "─ Clipboard History Picker ─ (showing #{display_count} of #{length(items)})\n" <>
         IO.ANSI.reset()
     )
+
+    separator = String.duplicate("-", 60)
 
     Enum.with_index(items)
     |> Enum.take(@max_display)
     |> Enum.each(fn {entry, idx} ->
       val = entry.value || ""
-      lines = val |> String.split("\n")
+      lines = String.split(val, "\n")
 
       preview_title =
         lines |> List.first() |> take_and_ellipsize(60) |> highlight_search(searchterm)
@@ -63,7 +63,7 @@ defmodule Clipixir.Picker do
 
       info =
         IO.ANSI.faint() <>
-          "[Count: #{entry.count} Last: #{format_ts(entry.last_used)}]" <>
+          "[Last: #{format_ts(entry.last_used)}]" <>
           IO.ANSI.reset()
 
       IO.puts("#{idx_txt} #{IO.ANSI.bright()}#{preview_title}#{IO.ANSI.reset()} #{info}")
@@ -72,7 +72,7 @@ defmodule Clipixir.Picker do
         IO.puts("    #{IO.ANSI.cyan()}#{snippet}#{IO.ANSI.reset()}")
       end
 
-      IO.puts(IO.ANSI.faint() <> String.duplicate("─", 60) <> IO.ANSI.reset())
+      IO.puts(IO.ANSI.faint() <> separator <> IO.ANSI.reset())
     end)
 
     if length(items) > @max_display do
@@ -138,6 +138,7 @@ defmodule Clipixir.Picker do
 
           if is_binary(val) and val != "" do
             System.cmd("sh", ["-c", "printf '%s' \"$1\" | pbcopy", "_", val])
+            # Promote+dedup in new backend format!
             Clipixir.promote_to_top_and_dedup(val)
 
             IO.puts(
@@ -180,7 +181,6 @@ defmodule Clipixir.Picker do
     end
   end
 
-  # Accepts all letters of `term` in order (like fzf)
   defp fuzzy_includes?(_text, term) when term in ["", nil], do: false
 
   defp fuzzy_includes?(text, term) do
@@ -198,9 +198,7 @@ defmodule Clipixir.Picker do
     end
   end
 
-  # Crude "fuzzy" distance
   defp fuzzy_distance(text, term) do
-    # Total distance between character matches
     chars = String.graphemes(term)
     find_distance(text, chars, 0)
   end
@@ -209,8 +207,12 @@ defmodule Clipixir.Picker do
 
   defp find_distance(text, [c | rest], dist) do
     case :binary.match(text, c) do
-      {idx, _len} -> find_distance(String.slice(text, (idx + 1)..-1), rest, dist + idx)
-      :nomatch -> 5000 + dist
+      {idx, _len} ->
+        new_text = String.slice(text, idx + 1, String.length(text) - (idx + 1))
+        find_distance(new_text, rest, dist + idx)
+
+      :nomatch ->
+        5000 + dist
     end
   end
 
@@ -233,12 +235,22 @@ defmodule Clipixir.Picker do
 
   defp highlight_search(str, _), do: str
 
-  defp format_ts(ts) when is_integer(ts) do
+  @doc """
+  Formats a unix timestamp (seconds) into YYYY-MM-DD HH:MM.
+  Accepts nil as blank.
+
+  ## Example
+
+      iex> Clipixir.Picker.format_ts(1718766000)
+      "2024-06-18 13:00"
+
+  """
+  def format_ts(ts) when is_integer(ts) do
     {{y, mo, d}, {h, mi, _s}} = :calendar.gregorian_seconds_to_datetime(ts + 62_167_219_200)
 
     :io_lib.format("~4..0B-~2..0B-~2..0B ~2..0B:~2..0B", [y, mo, d, h, mi])
     |> to_string()
   end
 
-  defp format_ts(_), do: ""
+  def format_ts(_), do: ""
 end

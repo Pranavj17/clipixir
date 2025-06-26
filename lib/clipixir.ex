@@ -24,9 +24,10 @@ defmodule Clipixir do
   """
 
   use GenServer
-  @history_file "clipboard_history.txt"
+
+  @history_file Path.expand("clipboard_history.txt", __DIR__)
   @check_interval 800
-  @max_entries 1000
+  @max_age_days 7
 
   def start_link(_opts) do
     GenServer.start_link(__MODULE__, %{}, name: __MODULE__)
@@ -38,21 +39,41 @@ defmodule Clipixir do
   end
 
   @doc """
-  Returns a list of `%{value, encoded, last_used, count}` entries, newest first.
+  Returns the clipboard history from the last N days (default: 7) as a list of maps.
+
+  Each entry is a map with keys:
+    - `:value`      — the decoded clipboard text (string)
+    - `:encoded`    — base64-encoded string (internal use)
+    - `:last_used`  — Unix timestamp (when this value was last seen/copied)
+
+  The result is ordered new-to-old (most recent first).
+
+  Entries older than 7 days are excluded from the returned list.
 
   ## Example
 
       iex> Clipixir.list_history()
-      [%{value: "foobar", count: 4, last_used: 1715753340, encoded: ...}, ...]
+      [
+        %{value: "password123", encoded: "...", last_used: 1718665404},
+        %{value: "Elixir cheatsheet", encoded: "...", last_used: 1718600000}
+      ]
 
+  Returns `[]` if no history exists or all entries are older than 7 days.
   """
-  def list_history() do
+  def list_history do
+    now = :os.system_time(:second)
+    cutoff = now - @max_age_days * 24 * 3600
+
     case File.read(@history_file) do
       {:ok, contents} ->
         contents
+        # skip empty lines
         |> String.split("\n", trim: true)
         |> Enum.map(&parse_entry/1)
-        |> Enum.filter(&is_map/1)
+        |> Enum.filter(fn
+          %{last_used: last_used} when is_integer(last_used) -> last_used >= cutoff
+          _ -> false
+        end)
 
       _ ->
         []
@@ -61,16 +82,10 @@ defmodule Clipixir do
 
   defp parse_entry(line) do
     case String.split(line, "|") do
-      [enc, last_used, count] ->
+      [enc, last_used] ->
         with {:ok, value} <- Base.decode64(enc),
-             {lu, ""} <- Integer.parse(last_used),
-             {cnt, ""} <- Integer.parse(count) do
-          %{
-            value: value,
-            encoded: enc,
-            last_used: lu,
-            count: cnt
-          }
+             {lu, ""} <- Integer.parse(last_used) do
+          %{value: value, encoded: enc, last_used: lu}
         else
           _ -> nil
         end
@@ -83,89 +98,66 @@ defmodule Clipixir do
   def handle_info(:check_clipboard, state) do
     current = get_clipboard()
     now = :os.system_time(:second)
-    entries = list_history()
 
-    already_top =
-      case entries do
-        [%{value: ^current} | _] -> true
-        _ -> false
-      end
-
-    cond do
-      current == state.last or current == "" or already_top ->
-        schedule_check()
-        {:noreply, state}
-
-      true ->
-        # Remove all existing occurrences
-        rest = Enum.reject(entries, &(&1.value == current))
-
-        count =
-          (entries
-           |> Enum.filter(&(&1.value == current))
-           |> Enum.map(& &1.count)
-           |> Enum.max(fn -> 0 end)) + 1
-
-        updated = [
-          %{value: current, encoded: Base.encode64(current), last_used: now, count: count}
-          | rest
-        ]
-
-        write_entries(updated)
-        schedule_check()
-        {:noreply, %{state | last: current}}
+    if current != state.last and current != "" do
+      entries = list_history()
+      rest = Enum.reject(entries, &(&1.value == current))
+      updated = [%{value: current, encoded: Base.encode64(current), last_used: now} | rest]
+      write_entries(updated)
+      schedule_check()
+      {:noreply, %{state | last: current}}
+    else
+      schedule_check()
+      {:noreply, state}
     end
   end
 
   @doc """
-  Promotes the given clipboard string to the top of the history, increments its usage count,
-  and removes older duplicate entries. Also updates the timestamp.
+  Moves the given clipboard string to the top of the history.
 
-      iex> Clipixir.promote_to_top_and_dedup("foo bar")
-      :ok  # (side effect: updates file)
+  - If the value already exists, removes all other copies and updates the timestamp to now.
+  - If it does not exist, adds it as the newest/first entry.
+  - Maintains only entries from the last 7 days.
 
+  Returns `:ok` after updating history.
+
+  ## Example
+
+      iex> Clipixir.promote_to_top_and_dedup("New clipboard text")
+      :ok
+
+  After running this, `Clipixir.list_history()` will have
+  "New clipboard text" as the top/most-recent entry,
+  with all other instances of that value removed.
+
+  If the given value was not in the history, it is added as the new first entry.
+  If already at the top, timestamp is updated.
   """
   def promote_to_top_and_dedup(selected_clip) when is_binary(selected_clip) do
     now = :os.system_time(:second)
-    entries = list_history()
-
-    rest = Enum.reject(entries, &(&1.value == selected_clip))
-
-    count =
-      (entries
-       |> Enum.filter(&(&1.value == selected_clip))
-       |> Enum.map(& &1.count)
-       |> Enum.max(fn -> 0 end)) + 1
+    rest = list_history() |> Enum.reject(&(&1.value == selected_clip))
 
     updated = [
-      %{value: selected_clip, encoded: Base.encode64(selected_clip), last_used: now, count: count}
-      | rest
+      %{value: selected_clip, encoded: Base.encode64(selected_clip), last_used: now} | rest
     ]
 
     write_entries(updated)
+    :ok
   end
 
+  # Write only entries <= 7 days old to file, no count
   defp write_entries(entries) do
-    # Auto-trim logic
     now = :os.system_time(:second)
-    cutoff = now - 7 * 24 * 3600
+    cutoff = now - @max_age_days * 24 * 3600
 
-    result =
-      if length(entries) > @max_entries do
-        entries
-        |> Enum.sort_by(fn %{last_used: lu, count: cnt} -> {lu >= cutoff, cnt, lu} end, :desc)
-        |> Enum.take(@max_entries)
-      else
-        entries
-      end
+    file_body =
+      entries
+      |> Enum.filter(fn %{last_used: last_used} -> last_used >= cutoff end)
+      |> Enum.map(fn %{encoded: enc, last_used: lu} -> "#{enc}|#{lu}" end)
+      |> Enum.join("\n")
+      |> Kernel.<>("\n")
 
-    File.write!(
-      @history_file,
-      (Enum.map(result, fn %{encoded: enc, last_used: lu, count: cnt} ->
-         "#{enc}|#{lu}|#{cnt}"
-       end)
-       |> Enum.join("\n")) <> "\n"
-    )
+    File.write!(@history_file, file_body)
   end
 
   defp get_clipboard do
@@ -173,5 +165,5 @@ defmodule Clipixir do
     String.trim_trailing(text)
   end
 
-  defp schedule_check(), do: Process.send_after(self(), :check_clipboard, @check_interval)
+  defp schedule_check, do: Process.send_after(self(), :check_clipboard, @check_interval)
 end
