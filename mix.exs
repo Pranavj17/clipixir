@@ -4,7 +4,7 @@ defmodule Clipixir.MixProject do
   def project do
     [
       app: :clipixir,
-      version: "0.1.1",
+      version: "0.1.2",
       elixir: "~> 1.17",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
